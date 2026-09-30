@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Рисование рукой</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090d;--glass:rgba(22,26,34,.72);--glass2:rgba(255,255,255,.075);
+  --border:rgba(255,255,255,.12);--text:#f7f8fb;--muted:#a8afbd;
+  --blue:#4d8dff;--red:#ff405c;--green:#00ff55;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 50% 20%,#172031 0,#090b10 42%,#040508 100%);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input{font:inherit}
+button{border:0;color:#fff;cursor:pointer}
+.app{position:fixed;inset:0}
+#drawCanvas,#skeletonCanvas,#effectsCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#drawCanvas{z-index:1}
+#effectsCanvas{z-index:2;pointer-events:none}
+#skeletonCanvas{z-index:3;pointer-events:none}
+#video{display:none}
+.glass{background:linear-gradient(135deg,rgba(30,35,45,.82),rgba(12,15,21,.64));border:1px solid var(--border);box-shadow:0 18px 55px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.06);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.topbar{position:absolute;z-index:10;left:16px;right:16px;top:16px;min-height:66px;border-radius:24px;display:flex;align-items:center;gap:8px;padding:9px;overflow:auto}
+.brand{font-weight:800;letter-spacing:.3px;padding:0 12px;white-space:nowrap}
+.brand span{color:#7ea9ff}
+.tools{display:flex;align-items:center;gap:7px;flex-wrap:nowrap}
+.tool,.iconbtn{height:44px;min-width:44px;padding:0 13px;border-radius:15px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);transition:.2s transform,.2s background,.2s box-shadow}
+.tool:hover,.iconbtn:hover{transform:translateY(-1px);background:rgba(255,255,255,.13)}
+.tool.active{background:linear-gradient(135deg,#4d8dff,#7c61ff);box-shadow:0 8px 24px rgba(77,141,255,.3)}
+.tool.danger{background:rgba(255,64,92,.14)}
+.tool.success{background:rgba(0,255,85,.10)}
+.colorWrap{height:44px;display:flex;align-items:center;gap:7px;padding:4px 9px;border-radius:15px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08)}
+#colorPicker{width:34px;height:34px;border:0;padding:0;background:transparent;border-radius:10px;overflow:hidden}
+#sizeRange{width:105px;accent-color:#6f9dff}
+.sizeVal{font-size:12px;color:var(--muted);min-width:36px;text-align:center}
+.palette{display:flex;gap:5px}
+.swatch{width:25px;height:25px;border-radius:50%;border:2px solid rgba(255,255,255,.3);padding:0}
+.swatch:hover{transform:scale(1.12)}
+.separator{width:1px;height:32px;background:rgba(255,255,255,.1);margin:0 2px}
+.side{position:absolute;z-index:10;right:16px;top:98px;bottom:16px;width:245px;border-radius:24px;padding:15px;overflow:auto}
+.side h3{font-size:15px;margin-bottom:12px}
+.layerList{display:flex;flex-direction:column;gap:8px}
+.layerItem{display:flex;align-items:center;gap:7px;padding:10px;border-radius:15px;background:rgba(255,255,255,.055);border:1px solid transparent;transition:.2s}
+.layerItem.active{border-color:rgba(100,150,255,.7);background:rgba(77,141,255,.13)}
+.layerName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.layerItem button{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.08);font-size:12px}
+.sideActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.sideActions button{padding:10px 6px;border-radius:12px;background:rgba(255,255,255,.07);font-size:12px}
+.statusBox{position:absolute;z-index:10;left:16px;bottom:16px;padding:12px 16px;border-radius:17px;font-size:13px;color:#dce4f3;max-width:calc(100vw - 300px)}
+.hint{color:var(--muted);font-size:11px;margin-top:4px}
+#startBtn{background:linear-gradient(135deg,#347dff,#765cff)}
+.toast{position:fixed;z-index:30;left:50%;bottom:25px;transform:translate(-50%,20px);opacity:0;pointer-events:none;padding:12px 17px;border-radius:14px;background:rgba(20,23,30,.9);border:1px solid var(--border);backdrop-filter:blur(15px);transition:.25s}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.modal{position:fixed;inset:0;z-index:25;display:none;place-items:center;background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}
+.modal.show{display:grid}
+.modalCard{width:min(390px,calc(100vw - 30px));padding:20px;border-radius:24px}
+.modalCard h3{margin-bottom:14px}
+.modalCard input[type=text]{width:100%;padding:13px 14px;border-radius:13px;border:1px solid var(--border);outline:none;background:rgba(255,255,255,.07);color:#fff}
+.modalBtns{display:flex;gap:8px;margin-top:12px}
+.modalBtns button{flex:1;padding:11px;border-radius:12px;background:rgba(255,255,255,.08)}
+.modalBtns .primary{background:#4d8dff}
+@media(max-width:900px){
+ .topbar{left:8px;right:8px;top:8px}.brand{display:none}
+ .side{right:8px;top:auto;bottom:8px;left:8px;width:auto;height:150px;padding:10px}
+ .layerList{flex-direction:row;overflow:auto}.layerItem{min-width:160px}
+ .sideActions{display:none}.statusBox{left:8px;bottom:170px;max-width:calc(100vw - 16px)}
+ .tool{padding:0 10px}.palette{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <video id="video" playsinline></video>
+  <canvas id="drawCanvas"></canvas>
+  <canvas id="effectsCanvas"></canvas>
+  <canvas id="skeletonCanvas"></canvas>
+
+  <div class="topbar glass">
+    <div class="brand">✋ <span>HandDraw</span></div>
+    <div class="tools">
+      <button class="tool active" id="brushBtn">🖊️ Кисть</button>
+      <button class="tool" id="eraserBtn">🧽 Ластик</button>
+      <div class="colorWrap">
+        <input id="colorPicker" type="color" value="#ffffff">
+        <div class="palette">
+          <button class="swatch" style="background:#ffffff" data-color="#ffffff"></button>
+          <button class="swatch" style="background:#4d8dff" data-color="#4d8dff"></button>
+          <button class="swatch" style="background:#00ff55" data-color="#00ff55"></button>
+          <button class="swatch" style="background:#ff405c" data-color="#ff405c"></button>
+          <button class="swatch" style="background:#b56cff" data-color="#b56cff"></button>
+          <button class="swatch" style="background:#ffd84d" data-color="#ffd84d"></button>
+        </div>
+      </div>
+      <input id="sizeRange" type="range" min="1" max="50" value="5">
+      <span class="sizeVal" id="sizeValue">5 px</span>
+      <button class="tool" id="neonBtn">✨ Неон</button>
+      <button class="iconbtn" id="undoBtn" title="Отменить">↶</button>
+      <button class="iconbtn" id="redoBtn" title="Повторить">↷</button>
+      <button class="tool danger" id="clearBtn">🗑 Очистить</button>
+      <button class="tool" id="saveBtn">💾 PNG</button>
+      <button class="tool" id="fullscreenBtn">⛶</button>
+      <button class="tool" id="startBtn">📷 Камера</button>
+    </div>
+  </div>
+
+  <aside class="side glass">
+    <h3>📚 Слои</h3>
+    <div class="layerList" id="layerList"></div>
+    <div class="sideActions">
+      <button id="addLayerBtn">＋ Новый слой</button>
+      <button id="renameBtn">✏️ Переименовать</button>
+      <button id="lockBtn">🔓 Заблокировать</button>
+      <button id="resetBtn">⟲ Сбросить</button>
+      <button id="clearLayerBtn">🧹 Очистить слой</button>
+      <button id="importBtn">🖼️ Импорт фото</button>
+    </div>
+    <input id="imageInput" type="file" accept="image/*" hidden>
+  </aside>
+
+  <div class="statusBox glass">
+    <div id="status">🟡 Нажми «Камера»</div>
+    <div class="hint">Правая рука: только указательный палец рисует. Левая — только для жестов масштаба.</div>
+  </div>
+</div>
+
+<div class="modal" id="renameModal">
+  <div class="modalCard glass">
+    <h3>Переименовать слой</h3>
+    <input id="renameInput" type="text" maxlength="40">
+    <div class="modalBtns">
+      <button id="cancelRename">Отмена</button>
+      <button class="primary" id="confirmRename">Сохранить</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script>
+const video=document.getElementById("video");
+const drawCanvas=document.getElementById("drawCanvas");
+const effectsCanvas=document.getElementById("effectsCanvas");
+const skeletonCanvas=document.getElementById("skeletonCanvas");
+const dctx=drawCanvas.getContext("2d");
+const ectx=effectsCanvas.getContext("2d");
+const sctx=skeletonCanvas.getContext("2d");
+const statusEl=document.getElementById("status");
+const colorPicker=document.getElementById("colorPicker");
+const sizeRange=document.getElementById("sizeRange");
+const sizeValue=document.getElementById("sizeValue");
+const layerList=document.getElementById("layerList");
+const toastEl=document.getElementById("toast");
+
+let layers=[],activeLayer=0;
+let tool="brush",brushSize=5,eraserSize=20,neon=false;
+let rightHand=null,leftHand=null,smoothRight=null,smoothLeft=null;
+let lastDrawX=null,lastDrawY=null;
+let drawing=false,strokeSnapshotSaved=false;
+let pinchActive=false,pinchStartDist=0,pinchStartScale=1,pinchStartX=0,pinchStartY=0;
+let smoothing=.55,particles=[],lastParticleTime=0;
+let cameraStarted=false;
+
+function W(){return drawCanvas.width}
+function H(){return drawCanvas.height}
+function resizeCanvases(){
+  const w=video.videoWidth||innerWidth*1.5,h=video.videoHeight||innerHeight*1.5;
+  const oldW=drawCanvas.width,oldH=drawCanvas.height;
+  drawCanvas.width=effectsCanvas.width=skeletonCanvas.width=w;
+  drawCanvas.height=effectsCanvas.height=skeletonCanvas.height=h;
+  if(oldW&&oldH){
+    for(const l of layers){
+      const old=l.canvas;
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(old,0,0,w,h);
+      l.canvas=c;l.ctx=c.getContext("2d");
+    }
+  }
+  render();
+}
+function newLayer(name="Слой 1"){
+  const c=document.createElement("canvas");c.width=W()||1280;c.height=H()||720;
+  const ctx=c.getContext("2d");
+  return {canvas:c,ctx,x:0,y:0,scale:1,name,locked:false,history:[],redo:[]};
+}
+function addLayer(name){
+  layers.push(newLayer(name||`Слой ${layers.length+1}`));
+  activeLayer=layers.length-1;renderLayers();saveAuto();render();
+}
+function current(){return layers[activeLayer]}
+function snapshot(l){
+  try{return l.canvas.toDataURL("image/webp",.82)}catch(e){return l.canvas.toDataURL()}
+}
+function pushHistory(l){
+  if(!l)return;
+  l.history.push(snapshot(l));if(l.history.length>30)l.history.shift();l.redo=[];
+}
+function restoreData(l,data,done){
+  const img=new Image();
+  img.onload=()=>{l.ctx.clearRect(0,0,W(),H());l.ctx.drawImage(img,0,0);done&&done();render();saveAuto()};
+  img.src=data;
+}
+function undo(){
+  const l=current();if(!l||!l.history.length){toast("Нечего отменять");return}
+  l.redo.push(snapshot(l));const data=l.history.pop();
+  restoreData(l,data);
+}
+function redo(){
+  const l=current();if(!l||!l.redo.length){toast("Нечего повторять");return}
+  l.history.push(snapshot(l));const data=l.redo.pop();
+  restoreData(l,data);
+}
+function setTool(t){
+  tool=t;
+  document.getElementById("brushBtn").classList.toggle("active",t==="brush");
+  document.getElementById("eraserBtn").classList.toggle("active",t==="eraser");
+  updateSizeUI();lastDrawX=lastDrawY=null;
+}
+function updateSizeUI(){
+  const val=tool==="eraser"?eraserSize:brushSize;
+  sizeRange.value=val;sizeValue.textContent=val+" px";
+}
+function applyColor(c){colorPicker.value=c}
+function pointDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function isFingerExtended(hand,tip,pip){return hand[tip].y<hand[pip].y-0.015}
+function isFingerFolded(hand,tip,pip){return hand[tip].y>hand[pip].y-0.005}
+function isThumbFolded(hand){
+  return pointDistance(hand[4],hand[9])<pointDistance(hand[3],hand[9])*1.15;
+}
+function canDrawWithRightHand(){
+  if(!rightHand)return false;
+  return isFingerExtended(rightHand,8,6)&&
+    isFingerFolded(rightHand,12,10)&&
+    isFingerFolded(rightHand,16,14)&&
+    isFingerFolded(rightHand,20,18)&&
+    isThumbFolded(rightHand);
+}
+function smoothHand(prev,next){
+  if(!next)return null;if(!prev)return next.map(p=>({x:p.x,y:p.y,z:p.z||0}));
+  return next.map((p,i)=>({x:prev[i].x+(p.x-prev[i].x)*smoothing,y:prev[i].y+(p.y-prev[i].y)*smoothing,z:p.z||0}));
+}
+function screenPoint(p){return {x:(1-p.x)*W(),y:p.y*H()}}
+function screenToLayer(x,y,l){
+  return {x:(x-l.x)/l.scale,y:(y-l.y)/l.scale}
+}
+function drawLine(x1,y1,x2,y2){
+  const l=current();if(!l||l.locked)return;
+  if(!strokeSnapshotSaved){pushHistory(l);strokeSnapshotSaved=true}
+  const a=screenToLayer(x1,y1,l),b=screenToLayer(x2,y2,l);
+  const size=(tool==="eraser"?eraserSize:brushSize)/l.scale;
+  const c=l.ctx;c.save();c.lineWidth=size;c.lineCap="round";c.lineJoin="round";
+  if(tool==="eraser"){c.globalCompositeOperation="destination-out";c.shadowBlur=0}
+  else{c.globalCompositeOperation="source-over";c.strokeStyle=colorPicker.value;c.shadowColor=colorPicker.value;c.shadowBlur=neon?Math.max(8,size*2.5):0}
+  c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke();c.restore();
+  render();saveAuto();
+}
+function drawWithRightHand(){
+  if(!rightHand||pinchActive||!canDrawWithRightHand()){lastDrawX=lastDrawY=null;drawing=false;strokeSnapshotSaved=false;return}
+  const p=screenPoint(rightHand[8]);
+  drawBrushIndicator(p.x,p.y);
+  if(lastDrawX!==null)drawLine(lastDrawX,lastDrawY,p.x,p.y);
+  lastDrawX=p.x;lastDrawY=p.y;drawing=true;
+  if(performance.now()-lastParticleTime>45){spawnParticles(p.x,p.y);lastParticleTime=performance.now()}
+}
+function drawBrushIndicator(x,y){
+  sctx.save();sctx.beginPath();sctx.arc(x,y,(tool==="eraser"?eraserSize:brushSize)*1.15,0,Math.PI*2);
+  sctx.strokeStyle=tool==="eraser"?"rgba(255,255,255,.8)":colorPicker.value;sctx.lineWidth=2;sctx.stroke();sctx.restore();
+}
+function isPinching(h){return h&&pointDistance(h[4],h[8])<.075}
+function updatePinch(){
+  if(!rightHand||!leftHand||!isPinching(rightHand)||!isPinching(leftHand)){
+    if(pinchActive){pinchActive=false;lastDrawX=lastDrawY=null;strokeSnapshotSaved=false;saveAuto()}
+    return;
+  }
+  const a=screenPoint(rightHand[8]),b=screenPoint(leftHand[8]);
+  const center={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+  const dist=Math.hypot(a.x-b.x,a.y-b.y);
+  const l=current();if(!l||l.locked)return;
+  if(!pinchActive){
+    pinchActive=true;pinchStartDist=Math.max(dist,1);pinchStartScale=l.scale;
+    pinchStartX=center.x-l.x;pinchStartY=center.y-l.y;lastDrawX=lastDrawY=null;strokeSnapshotSaved=false;
+  }else{
+    l.scale=Math.max(.15,Math.min(5,pinchStartScale*(dist/pinchStartDist)));
+    l.x=center.x-pinchStartX;l.y=center.y-pinchStartY;render();saveAuto();
+  }
+}
+function drawSkeleton(hand,color){
+  const links=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  sctx.save();sctx.strokeStyle=color;sctx.fillStyle=color;sctx.lineWidth=3;sctx.shadowColor=color;sctx.shadowBlur=7;
+  for(const [a,b] of links){const p=screenPoint(hand[a]),q=screenPoint(hand[b]);sctx.beginPath();sctx.moveTo(p.x,p.y);sctx.lineTo(q.x,q.y);sctx.stroke()}
+  for(const p0 of hand){const p=screenPoint(p0);sctx.beginPath();sctx.arc(p.x,p.y,4,0,Math.PI*2);sctx.fill()}
+  sctx.restore();
+}
+function spawnParticles(x,y){
+  if(tool==="eraser")return;
+  for(let i=0;i<3;i++)particles.push({x,y,vx:(Math.random()-.5)*2.4,vy:(Math.random()-.5)*2.4-0.5,life:1,size:1.5+Math.random()*3});
+}
+function animateEffects(){
+  ectx.clearRect(0,0,W(),H());
+  particles=particles.filter(p=>p.life>0);
+  for(const p of particles){
+    p.x+=p.vx;p.y+=p.vy;p.vy+=.025;p.life-=.045;
+    ectx.save();ectx.globalAlpha=Math.max(0,p.life);ectx.fillStyle=colorPicker.value;ectx.shadowColor=colorPicker.value;ectx.shadowBlur=8;
+    ectx.beginPath();ectx.arc(p.x,p.y,p.size,0,Math.PI*2);ectx.fill();ectx.restore();
+  }
+  requestAnimationFrame(animateEffects);
+}
+function render(){
+  dctx.clearRect(0,0,W(),H());
+  for(const l of layers){
+    dctx.save();dctx.translate(l.x,l.y);dctx.scale(l.scale,l.scale);dctx.drawImage(l.canvas,0,0);dctx.restore();
+  }
+}
+function renderLayers(){
+  layerList.innerHTML="";
+  layers.forEach((l,i)=>{
+    const row=document.createElement("div");row.className="layerItem"+(i===activeLayer?" active":"");
+    const name=document.createElement("div");name.className="layerName";name.textContent=(l.locked?"🔒 ":"")+l.name;
+    const eye=document.createElement("button");eye.textContent="👁";eye.title="Показать/скрыть";
+    let visible=true;
+    eye.onclick=e=>{e.stopPropagation();visible=!visible; l.canvas.style.display=visible?"block":"none";render()};
+    const up=document.createElement("button");up.textContent="↑";up.title="Выше";
+    up.onclick=e=>{e.stopPropagation();if(i>0){[layers[i-1],layers[i]]=[layers[i],layers[i-1]];activeLayer=i-1;renderLayers();render();saveAuto()}};
+    row.onclick=()=>{activeLayer=i;renderLayers();updateSizeUI()};
+    row.append(name,eye,up);layerList.appendChild(row);
+  });
+}
+function toast(msg){toastEl.textContent=msg;toastEl.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>toastEl.classList.remove("show"),1800)}
+function saveAuto(){
+  clearTimeout(saveAuto.t);
+  saveAuto.t=setTimeout(()=>{
+    try{
+      const data=layers.map(l=>({name:l.name,x:l.x,y:l.y,scale:l.scale,locked:l.locked,img:snapshot(l)}));
+      localStorage.setItem("handDrawAuto",JSON.stringify({activeLayer,data}));
+    }catch(e){console.warn("Autosave quota",e)}
+  },500);
+}
+async function restoreAuto(){
+  try{
+    const raw=localStorage.getItem("handDrawAuto");if(!raw)return;
+    const saved=JSON.parse(raw);layers=[];
+    for(const item of saved.data){
+      const l=newLayer(item.name);l.x=item.x;l.y=item.y;l.scale=item.scale;l.locked=item.locked;
+      await new Promise(res=>{const img=new Image();img.onload=()=>{l.ctx.drawImage(img,0,0);res()};img.onerror=res;img.src=item.img});
+      layers.push(l);
+    }
+    activeLayer=Math.min(saved.activeLayer||0,layers.length-1);
+    renderLayers();render();
+  }catch(e){layers=[newLayer("Слой 1")];activeLayer=0;renderLayers()}
+}
+function clearLayer(){
+  const l=current();if(!l||l.locked)return toast("Слой заблокирован");
+  pushHistory(l);l.ctx.clearRect(0,0,W(),H());render();saveAuto()
+}
+function resetLayer(){
+  const l=current();if(!l||l.locked)return;
+  l.x=0;l.y=0;l.scale=1;render();saveAuto()
+}
+function exportPNG(){
+  const out=document.createElement("canvas");out.width=W();out.height=H();const c=out.getContext("2d");
+  for(const l of layers){c.save();c.translate(l.x,l.y);c.scale(l.scale,l.scale);c.drawImage(l.canvas,0,0);c.restore()}
+  const a=document.createElement("a");a.download="hand-drawing.png";a.href=out.toDataURL("image/png");a.click()
+}
+function importImage(file){
+  if(!file)return;
+  const img=new Image();img.onload=()=>{
+    const l=newLayer(file.name.replace(/\.[^.]+$/,""));l.x=0;l.y=0;
+    const scale=Math.min(W()/img.width,H()/img.height)*.75;l.scale=scale;
+    l.ctx.drawImage(img,(W()/scale-img.width)/2,(H()/scale-img.height)/2);
+    layers.push(l);activeLayer=layers.length-1;renderLayers();render();saveAuto();toast("Изображение добавлено новым слоем")
+  };
+  img.src=URL.createObjectURL(file)
+}
+function renameOpen(){
+  const l=current();if(!l)return;
+  document.getElementById("renameInput").value=l.name;document.getElementById("renameModal").classList.add("show");
+  setTimeout(()=>document.getElementById("renameInput").focus(),30)
+}
+document.getElementById("brushBtn").onclick=()=>setTool("brush");
+document.getElementById("eraserBtn").onclick=()=>setTool("eraser");
+document.getElementById("neonBtn").onclick=()=>{neon=!neon;document.getElementById("neonBtn").classList.toggle("active",neon)};
+document.getElementById("undoBtn").onclick=undo;
+document.getElementById("redoBtn").onclick=redo;
+document.getElementById("clearBtn").onclick=()=>{current().locked?toast("Слой заблокирован"):(pushHistory(current()),current().ctx.clearRect(0,0,W(),H()),render(),saveAuto())};
+document.getElementById("saveBtn").onclick=exportPNG;
+document.getElementById("fullscreenBtn").onclick=()=>document.documentElement.requestFullscreen?.();
+document.getElementById("addLayerBtn").onclick=()=>addLayer();
+document.getElementById("renameBtn").onclick=renameOpen;
+document.getElementById("lockBtn").onclick=()=>{const l=current();if(l){l.locked=!l.locked;renderLayers();saveAuto()}};
+document.getElementById("resetBtn").onclick=resetLayer;
+document.getElementById("clearLayerBtn").onclick=clearLayer;
+document.getElementById("importBtn").onclick=()=>document.getElementById("imageInput").click();
+document.getElementById("imageInput").onchange=e=>importImage(e.target.files[0]);
+document.getElementById("cancelRename").onclick=()=>document.getElementById("renameModal").classList.remove("show");
+document.getElementById("confirmRename").onclick=()=>{
+  const v=document.getElementById("renameInput").value.trim();if(v)current().name=v;
+  document.getElementById("renameModal").classList.remove("show");renderLayers();saveAuto()
+};
+colorPicker.oninput=()=>{};
+sizeRange.oninput=()=>{const v=+sizeRange.value;if(tool==="eraser")eraserSize=v;else brushSize=v;sizeValue.textContent=v+" px"};
+document.querySelectorAll(".swatch").forEach(b=>b.onclick=()=>applyColor(b.dataset.color));
+window.addEventListener("keydown",e=>{
+  if(e.ctrlKey&&e.key.toLowerCase()==="z"){e.preventDefault();undo()}
+  if(e.ctrlKey&&e.key.toLowerCase()==="y"){e.preventDefault();redo()}
+  if(e.key==="b")setTool("brush");
+  if(e.key==="e")setTool("eraser");
+});
+window.addEventListener("resize",()=>{if(video.videoWidth)resizeCanvases()});
+
+const hands=new Hands({locateFile:file=>"https://cdn.jsdelivr.net/npm/@mediapipe/hands/"+file});
+hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.65,minTrackingConfidence:.65});
+hands.onResults(results=>{
+  if(!video.videoWidth)return;
+  rightHand=null;leftHand=null;
+  const detected=results.multiHandLandmarks||[],labels=results.multiHandedness||[];
+  for(let i=0;i<detected.length;i++){
+    const label=labels[i]?.label;
+    // В этой камере MediaPipe labels инвертированы:
+    // MediaPipe Left = физическая правая рука (зелёная, рисует)
+    // MediaPipe Right = физическая левая рука (красная, не рисует)
+    if(label==="Left")rightHand=detected[i];
+    if(label==="Right")leftHand=detected[i];
+  }
+  smoothRight=smoothHand(smoothRight,rightHand);
+  smoothLeft=smoothHand(smoothLeft,leftHand);
+  rightHand=smoothRight;leftHand=smoothLeft;
+  sctx.clearRect(0,0,W(),H());
+  if(smoothRight)drawSkeleton(smoothRight,"#00ff55");
+  if(smoothLeft)drawSkeleton(smoothLeft,"#ff405c");
+  updatePinch();
+  if(!pinchActive)drawWithRightHand();
+  else{lastDrawX=lastDrawY=null;drawing=false}
+  if(!rightHand)statusEl.textContent="🟡 Покажи правую руку";
+  else if(pinchActive)statusEl.textContent="🟣 Две руки: масштабирование и перемещение слоя";
+  else if(canDrawWithRightHand())statusEl.textContent="🟢 Вытянут только указательный — рисуем";
+  else statusEl.textContent="🟡 Вытяни только указательный палец";
+});
+
+document.getElementById("startBtn").onclick=()=>{
+  if(cameraStarted)return;
+  statusEl.textContent="🔄 Запрашиваю доступ к камере...";
+  try{
+    const camera=new Camera(video,{onFrame:async()=>{await hands.send({image:video})},width:1280,height:720});
+    camera.start();cameraStarted=true;
+    document.getElementById("startBtn").textContent="📷 Запущена";
+    video.addEventListener("loadedmetadata",resizeCanvases,{once:true});
+  }catch(e){console.error(e);statusEl.textContent="❌ Не удалось получить доступ к камере"}
+};
+
+(async()=>{
+  if(!layers.length)layers=[newLayer("Слой 1")];
+  renderLayers();updateSizeUI();render();animateEffects();await restoreAuto();render();
+})();
+</script>
+</body>
+</html>
+
+
